@@ -1,5 +1,5 @@
 # channelqueue
-[![Build Status](https://travis-ci.org/gammazero/channelqueue.svg)](https://travis-ci.org/gammazero/channelqueue)
+[![Build Status](https://travis-ci.com/gammazero/channelqueue.svg)](https://travis-ci.com/gammazero/channelqueue)
 [![GoDoc](https://godoc.org/github.com/gammazero/bugchan?status.svg)](https://godoc.org/github.com/gammazero/channelqueue)
 
 channelqueue implements a queue that uses channels for input and output to provide concurrent access to a resizable queue, and allowing the queue to be used like a channel. Closing the input channel closes the output channel when all queued items are read, consistent with channel behavior.  In other words channelqueue is a dynamically buffered channel with up to infinite capacity.
