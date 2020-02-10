@@ -6,6 +6,6 @@ channelqueue implements a queue that uses channels for input and output to provi
 
 When specifying an unlimited buffer capacity use caution as the buffer is still limited by the resources available on the host system.
 
-The channelqueue buffer is supplied by a fast queue implementation, which auto-resizes according to the number of items buffered. For more information on the queue, see: https://github.com/gammazero/dequeue
+The channelqueue buffer is supplied by a fast queue implementation, which auto-resizes according to the number of items buffered. For more information on the queue, see: https://github.com/gammazero/deque
 
 
