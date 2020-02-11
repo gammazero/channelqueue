@@ -1,6 +1,12 @@
 # channelqueue
 [![Build Status](https://travis-ci.com/gammazero/channelqueue.svg)](https://travis-ci.com/gammazero/channelqueue)
-[![GoDoc](https://godoc.org/github.com/gammazero/bugchan?status.svg)](https://godoc.org/github.com/gammazero/channelqueue)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gammazero/channelqueue)](https://goreportcard.com/report/github.com/gammazero/channelqueue)
+[![codecov](https://codecov.io/gh/gammazero/channelqueue/branch/master/graph/badge.svg)](https://codecov.io/gh/gammazero/channelqueue)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Concurrent access to dynamic buffer using channels.
+
+[![GoDoc](https://godoc.org/github.com/gammazero/channelqueue?status.svg)](https://godoc.org/github.com/gammazero/channelqueue)
 
 channelqueue implements a queue that uses channels for input and output to provide concurrent access to a resizable queue, and allowing the queue to be used like a channel. Closing the input channel closes the output channel when all queued items are read, consistent with channel behavior.  In other words channelqueue is a dynamically buffered channel with up to infinite capacity.
 
