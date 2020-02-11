@@ -6,3 +6,6 @@ go:
 
 before_script:
   - go vet ./...
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
