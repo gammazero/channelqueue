@@ -8,7 +8,7 @@ Concurrently access dynamic queue using channels.
 
 [![GoDoc](https://godoc.org/github.com/gammazero/channelqueue?status.svg)](https://godoc.org/github.com/gammazero/channelqueue)
 
-channelqueue implements a queue that uses channels for input and output to provide concurrent access to a dynamically-sized queue, and allowing the queue to be used like a channel. Closing the input channel closes the output channel when all queued items are read, consistent with channel behavior.  In other words channelqueue is a dynamically buffered channel with up to infinite capacity.
+channelqueue implements a queue that uses channels for input and output to provide concurrent access to a dynamically-sized queue.  This allows the queue to be used like a channel, in a thread-safe manner. Closing the input channel closes the output channel when all queued items are read, consistent with channel behavior.  In other words channelqueue is a dynamically buffered channel with up to infinite capacity.
 
 When specifying an unlimited buffer capacity use caution as the buffer is still limited by the resources available on the host system.
 
