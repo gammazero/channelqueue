@@ -10,10 +10,10 @@ ChannelQueue implements a queue that uses channels for input and output to provi
 
 When specifying an unlimited buffer capacity use caution as the buffer is still limited by the resources available on the host system.
 
-The ChannelQueue buffer is supplied by a fast queue implementation, which auto-resizes according to the number of items buffered. For more information on the queue, see: https://github.com/gammazero/deque
+The ChannelQueue buffer auto-resizes according to the number of items buffered. For more information on the queue, see: https://github.com/gammazero/deque
 
 ChannelQueue uses generics to contain items of the type specified. To create a ChannelQueue that holds a specific type, provide a type argument to `New`. For example:
 ```go
-	intChanQueue := channelqueue.New[int](1024)
-    stringChanQueue := channelqueue.New[string](-1)
+intChanQueue := channelqueue.New[int](1024)
+stringChanQueue := channelqueue.New[string](-1)
 ```
