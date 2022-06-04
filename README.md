@@ -1,5 +1,6 @@
 # channelqueue
 [![GoDoc](https://pkg.go.dev/badge/github.com/gammazero/channelqueue)](https://pkg.go.dev/github.com/gammazero/channelqueue)
+[![Build Status](https://github.com/gammazero/channelqueue/actions/workflows/go.yml/badge.svg)](https://github.com/gammazero/channelqueue/actions/workflows/go.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gammazero/channelqueue)](https://goreportcard.com/report/github.com/gammazero/channelqueue)
 [![codecov](https://codecov.io/gh/gammazero/channelqueue/branch/master/graph/badge.svg)](https://codecov.io/gh/gammazero/channelqueue)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
