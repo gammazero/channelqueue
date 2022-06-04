@@ -1,6 +1,8 @@
 package channelqueue
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -33,6 +35,9 @@ func TestCapLen(t *testing.T) {
 		}
 	}()
 	cq = New[int](0)
+	if cq != nil {
+		t.Fatal("expected nil")
+	}
 }
 
 func TestUnlimitedSpace(t *testing.T) {
@@ -88,6 +93,7 @@ func TestBufferLimit(t *testing.T) {
 func TestRace(t *testing.T) {
 	ch := New[int](-1)
 
+	var err error
 	done := make(chan struct{})
 	go func() {
 		for {
@@ -97,10 +103,10 @@ func TestRace(t *testing.T) {
 			default:
 			}
 			if ch.Len() > 1000 {
-				t.Fatal("Len too great")
+				err = errors.New("Len too great")
 			}
 			if ch.Cap() != -1 {
-				t.Fatal("expected Cap to return -1")
+				err = errors.New("expected Cap to return -1")
 			}
 		}
 	}()
@@ -132,6 +138,9 @@ func TestRace(t *testing.T) {
 	if val != 999 {
 		t.Fatalf("last value should be 999, got %d", val)
 	}
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestDouble(t *testing.T) {
@@ -144,11 +153,13 @@ func TestDouble(t *testing.T) {
 		}
 		ch.Close()
 	}()
+	var err error
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			val := <-ch.Out()
 			if i != val {
-				t.Fatal("expected", i, "but got", val)
+				err = fmt.Errorf("expected %d but got %d", i, val)
+				return
 			}
 			recvCh.In() <- i
 		}
@@ -158,6 +169,9 @@ func TestDouble(t *testing.T) {
 		if i != val {
 			t.Fatal("expected", i, "but got", val)
 		}
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
