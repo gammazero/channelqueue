@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
+        with:
+          go-version: 1.18
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
