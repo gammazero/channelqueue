@@ -1,5 +1,5 @@
 module github.com/gammazero/channelqueue
 
-go 1.12
+go 1.18
 
-require github.com/gammazero/deque v0.0.0-20200124200322-7e84b94275b8
+require github.com/gammazero/deque v0.2.0

@@ -6,12 +6,12 @@ import (
 )
 
 func TestCapLen(t *testing.T) {
-	cq := New(-1)
+	cq := New[int](-1)
 	if cq.Cap() != -1 {
 		t.Error("expected capacity -1")
 	}
 
-	cq = New(3)
+	cq = New[int](3)
 	if cq.Cap() != 3 {
 		t.Error("expected capacity 3")
 	}
@@ -32,12 +32,12 @@ func TestCapLen(t *testing.T) {
 			t.Error("expected panic from capacity 0")
 		}
 	}()
-	cq = New(0)
+	cq = New[int](0)
 }
 
 func TestUnlimitedSpace(t *testing.T) {
 	const msgCount = 1000
-	ch := New(-1)
+	ch := New[int](-1)
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -46,15 +46,15 @@ func TestUnlimitedSpace(t *testing.T) {
 	}()
 	for i := 0; i < msgCount; i++ {
 		val := <-ch.Out()
-		if i != val.(int) {
-			t.Fatal("expected", i, "but got", val.(int))
+		if i != val {
+			t.Fatal("expected", i, "but got", val)
 		}
 	}
 }
 
 func TestLimitedSpace(t *testing.T) {
 	const msgCount = 1000
-	ch := New(32)
+	ch := New[int](32)
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -63,20 +63,20 @@ func TestLimitedSpace(t *testing.T) {
 	}()
 	for i := 0; i < msgCount; i++ {
 		val := <-ch.Out()
-		if i != val.(int) {
-			t.Fatal("expected", i, "but got", val.(int))
+		if i != val {
+			t.Fatal("expected", i, "but got", val)
 		}
 	}
 }
 
 func TestBufferLimit(t *testing.T) {
-	ch := New(32)
+	ch := New[int](32)
 	for i := 0; i < ch.Cap(); i++ {
-		ch.In() <- nil
+		ch.In() <- i
 	}
 	var timeout bool
 	select {
-	case ch.In() <- nil:
+	case ch.In() <- 999:
 	case <-time.After(200 * time.Millisecond):
 		timeout = true
 	}
@@ -86,23 +86,58 @@ func TestBufferLimit(t *testing.T) {
 }
 
 func TestRace(t *testing.T) {
-	ch := New(-1)
-	go ch.Len()
-	go ch.Cap()
+	ch := New[int](-1)
 
+	done := make(chan struct{})
 	go func() {
-		ch.In() <- nil
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			if ch.Len() > 1000 {
+				t.Fatal("Len too great")
+			}
+			if ch.Cap() != -1 {
+				t.Fatal("expected Cap to return -1")
+			}
+		}
 	}()
 
+	ready := make(chan struct{}, 2)
+	start := make(chan struct{})
 	go func() {
-		<-ch.Out()
+		ready <- struct{}{}
+		<-start
+		for i := 0; i < 1000; i++ {
+			ch.In() <- i
+		}
 	}()
+
+	var val int
+	go func() {
+		ready <- struct{}{}
+		<-start
+		for i := 0; i < 1000; i++ {
+			val = <-ch.Out()
+		}
+		close(done)
+	}()
+
+	<-ready
+	<-ready
+	close(start)
+	<-done
+	if val != 999 {
+		t.Fatalf("last value should be 999, got %d", val)
+	}
 }
 
 func TestDouble(t *testing.T) {
 	const msgCount = 1000
-	ch := New(100)
-	recvCh := New(100)
+	ch := New[int](100)
+	recvCh := New[int](100)
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -112,24 +147,24 @@ func TestDouble(t *testing.T) {
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			val := <-ch.Out()
-			if i != val.(int) {
-				t.Fatal("expected", i, "but got", val.(int))
+			if i != val {
+				t.Fatal("expected", i, "but got", val)
 			}
 			recvCh.In() <- i
 		}
 	}()
 	for i := 0; i < msgCount; i++ {
 		val := <-recvCh.Out()
-		if i != val.(int) {
-			t.Fatal("expected", i, "but got", val.(int))
+		if i != val {
+			t.Fatal("expected", i, "but got", val)
 		}
 	}
 }
 
 func BenchmarkSerial(b *testing.B) {
-	ch := New(b.N)
+	ch := New[int](b.N)
 	for i := 0; i < b.N; i++ {
-		ch.In() <- nil
+		ch.In() <- i
 	}
 	for i := 0; i < b.N; i++ {
 		<-ch.Out()
@@ -137,7 +172,7 @@ func BenchmarkSerial(b *testing.B) {
 }
 
 func BenchmarkParallel(b *testing.B) {
-	ch := New(b.N)
+	ch := New[int](b.N)
 	go func() {
 		for i := 0; i < b.N; i++ {
 			<-ch.Out()
@@ -145,15 +180,15 @@ func BenchmarkParallel(b *testing.B) {
 		<-ch.Out()
 	}()
 	for i := 0; i < b.N; i++ {
-		ch.In() <- nil
+		ch.In() <- i
 	}
 	ch.Close()
 }
 
 func BenchmarkPushPull(b *testing.B) {
-	ch := New(b.N)
+	ch := New[int](b.N)
 	for i := 0; i < b.N; i++ {
-		ch.In() <- nil
+		ch.In() <- i
 		<-ch.Out()
 	}
 }
