@@ -1,29 +1,31 @@
-package channelqueue
+package channelqueue_test
 
 import (
 	"errors"
 	"fmt"
 	"testing"
 	"time"
+
+	cq "github.com/gammazero/channelqueue"
 )
 
 func TestCapLen(t *testing.T) {
-	cq := New[int](-1)
-	if cq.Cap() != -1 {
+	ch := cq.New[int](-1)
+	if ch.Cap() != -1 {
 		t.Error("expected capacity -1")
 	}
 
-	cq = New[int](3)
-	if cq.Cap() != 3 {
+	ch = cq.New[int](3)
+	if ch.Cap() != 3 {
 		t.Error("expected capacity 3")
 	}
 
-	if cq.Len() != 0 {
+	if ch.Len() != 0 {
 		t.Error("expected 0 from Len()")
 	}
-	in := cq.In()
-	for i := 0; i < cq.Cap(); i++ {
-		if cq.Len() != i {
+	in := ch.In()
+	for i := 0; i < ch.Cap(); i++ {
+		if ch.Len() != i {
 			t.Errorf("expected %d from Len()", i)
 		}
 		in <- i
@@ -34,15 +36,15 @@ func TestCapLen(t *testing.T) {
 			t.Error("expected panic from capacity 0")
 		}
 	}()
-	cq = New[int](0)
-	if cq != nil {
+	ch = cq.New[int](0)
+	if ch != nil {
 		t.Fatal("expected nil")
 	}
 }
 
 func TestUnlimitedSpace(t *testing.T) {
 	const msgCount = 1000
-	ch := New[int](-1)
+	ch := cq.New[int](-1)
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -59,7 +61,7 @@ func TestUnlimitedSpace(t *testing.T) {
 
 func TestLimitedSpace(t *testing.T) {
 	const msgCount = 1000
-	ch := New[int](32)
+	ch := cq.New[int](32)
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -75,7 +77,7 @@ func TestLimitedSpace(t *testing.T) {
 }
 
 func TestBufferLimit(t *testing.T) {
-	ch := New[int](32)
+	ch := cq.New[int](32)
 	for i := 0; i < ch.Cap(); i++ {
 		ch.In() <- i
 	}
@@ -91,7 +93,7 @@ func TestBufferLimit(t *testing.T) {
 }
 
 func TestRace(t *testing.T) {
-	ch := New[int](-1)
+	ch := cq.New[int](-1)
 
 	var err error
 	done := make(chan struct{})
@@ -145,8 +147,8 @@ func TestRace(t *testing.T) {
 
 func TestDouble(t *testing.T) {
 	const msgCount = 1000
-	ch := New[int](100)
-	recvCh := New[int](100)
+	ch := cq.New[int](100)
+	recvCh := cq.New[int](100)
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -175,8 +177,63 @@ func TestDouble(t *testing.T) {
 	}
 }
 
+func TestDeadlock(t *testing.T) {
+	ch := cq.New[int](1)
+	ch.In() <- 1
+	<-ch.Out()
+
+	done := make(chan struct{})
+	go func() {
+		ch.In() <- 2
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Millisecond):
+		t.Fatal("could not write to channel")
+	}
+}
+
+func TestRing(t *testing.T) {
+	ch := cq.NewRing[rune](5)
+	for _, r := range "hello" {
+		ch.In() <- r
+	}
+
+	ch.In() <- 'w'
+	char := <-ch.Out()
+	if char != 'e' {
+		t.Fatal("expected 'e' but got", char)
+	}
+
+	for _, r := range "abcdefghij" {
+		ch.In() <- r
+	}
+
+	ch.Close()
+
+	out := make([]rune, 0, ch.Len())
+	for r := range ch.Out() {
+		out = append(out, r)
+	}
+	if string(out) != "fghij" {
+		t.Fatalf("expected \"fghij\" but got %q", out)
+	}
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic from capacity 0")
+		}
+	}()
+	ch = cq.NewRing[rune](0)
+	if ch != nil {
+		t.Fatal("expected nil")
+	}
+}
+
 func BenchmarkSerial(b *testing.B) {
-	ch := New[int](b.N)
+	ch := cq.New[int](b.N)
 	for i := 0; i < b.N; i++ {
 		ch.In() <- i
 	}
@@ -186,7 +243,7 @@ func BenchmarkSerial(b *testing.B) {
 }
 
 func BenchmarkParallel(b *testing.B) {
-	ch := New[int](b.N)
+	ch := cq.New[int](b.N)
 	go func() {
 		for i := 0; i < b.N; i++ {
 			<-ch.Out()
@@ -200,7 +257,7 @@ func BenchmarkParallel(b *testing.B) {
 }
 
 func BenchmarkPushPull(b *testing.B) {
-	ch := New[int](b.N)
+	ch := cq.New[int](b.N)
 	for i := 0; i < b.N; i++ {
 		ch.In() <- i
 		<-ch.Out()
