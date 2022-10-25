@@ -64,7 +64,7 @@ func NewRing[T any](capacity int) *ChannelQueue[T] {
 		length:   make(chan int),
 		capacity: capacity,
 	}
-	go cq.ringBufferInput()
+	go cq.ringBufferData()
 	return cq
 }
 
