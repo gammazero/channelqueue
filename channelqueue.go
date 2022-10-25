@@ -28,7 +28,7 @@ func New[T any](capacity int) *ChannelQueue[T] {
 		length:   make(chan int),
 		capacity: capacity,
 	}
-	go cq.bufferInput()
+	go cq.bufferData()
 	return cq
 }
 
@@ -46,7 +46,7 @@ func NewRing[T any](capacity int) *ChannelQueue[T] {
 		length:   make(chan int),
 		capacity: capacity,
 	}
-	go cq.ringBufferInput()
+	go cq.ringBufferData()
 	return cq
 }
 
@@ -77,12 +77,11 @@ func (cq *ChannelQueue[T]) Close() {
 	close(cq.input)
 }
 
-// bufferInput is the goroutine that transfers data from the In() chan to the
+// bufferData is the goroutine that transfers data from the In() chan to the
 // buffer and from the buffer to the Out() chan.
-func (cq *ChannelQueue[T]) bufferInput() {
+func (cq *ChannelQueue[T]) bufferData() {
 	var output chan T
-	var next T
-	var zero T
+	var next, zero T
 	inputChan := cq.input
 	input := inputChan
 
@@ -127,10 +126,12 @@ func (cq *ChannelQueue[T]) bufferInput() {
 	close(cq.length)
 }
 
-func (cq *ChannelQueue[T]) ringBufferInput() {
+// ringBufferData is the goroutine that transfers data from the In() chan to
+// the buffer and from the buffer to the Out() chan, with circular buffer
+// behavior of discarding the oldest item when writing to a full buffer.
+func (cq *ChannelQueue[T]) ringBufferData() {
 	var output chan T
-	var next T
-	var zero T
+	var next, zero T
 	input := cq.input
 
 	for input != nil || output != nil {
