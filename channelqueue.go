@@ -50,6 +50,24 @@ func NewRing[T any](capacity int) *ChannelQueue[T] {
 	return cq
 }
 
+// NewRing creates a new ChannelQueue with the specified buffer capacity, and
+// circular buffer behavior. When the buffer is full, writing an additional
+// item discards the oldest buffered item.
+func NewRing[T any](capacity int) *ChannelQueue[T] {
+	if capacity < 1 {
+		return New[T](capacity)
+	}
+
+	cq := &ChannelQueue[T]{
+		input:    make(chan T),
+		output:   make(chan T),
+		length:   make(chan int),
+		capacity: capacity,
+	}
+	go cq.ringBufferInput()
+	return cq
+}
+
 // In returns the write side of the channel.
 func (cq *ChannelQueue[T]) In() chan<- T {
 	return cq.input
