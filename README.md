@@ -9,6 +9,8 @@ Concurrently access a dynamic queue using channels.
 
 ChannelQueue implements a queue that uses channels for input and output to provide concurrent access to a dynamically-sized queue. This allows the queue to be used like a channel, in a thread-safe manner. Closing the input channel closes the output channel when all queued items are read, consistent with channel behavior. In other words a ChannelQueue is a dynamically buffered channel with up to infinite capacity.
 
+ChannelQueue also supports circular buffer behavior when created using `NewRing`. When the buffer is full, writing an additional item discards the oldest buffered item.
+
 When specifying an unlimited buffer capacity use caution as the buffer is still limited by the resources available on the host system.
 
 The ChannelQueue buffer auto-resizes according to the number of items buffered. For more information on the queue, see: https://github.com/gammazero/deque

@@ -6,7 +6,6 @@ import "github.com/gammazero/deque"
 type ChannelQueue[T any] struct {
 	input, output chan T
 	length        chan int
-	buffer        deque.Deque[T]
 	capacity      int
 }
 
@@ -46,7 +45,11 @@ func NewRing[T any](capacity int) *ChannelQueue[T] {
 		length:   make(chan int),
 		capacity: capacity,
 	}
-	go cq.ringBufferData()
+	if capacity == 1 {
+		go cq.oneBufferData()
+	} else {
+		go cq.ringBufferData()
+	}
 	return cq
 }
 
@@ -80,6 +83,7 @@ func (cq *ChannelQueue[T]) Close() {
 // bufferData is the goroutine that transfers data from the In() chan to the
 // buffer and from the buffer to the Out() chan.
 func (cq *ChannelQueue[T]) bufferData() {
+	var buffer deque.Deque[T]
 	var output chan T
 	var next, zero T
 	inputChan := cq.input
@@ -90,7 +94,7 @@ func (cq *ChannelQueue[T]) bufferData() {
 		case elem, open := <-input:
 			if open {
 				// Push data from input chan to buffer.
-				cq.buffer.PushBack(elem)
+				buffer.PushBack(elem)
 			} else {
 				// Input chan closed; do not select input chan.
 				input = nil
@@ -98,23 +102,23 @@ func (cq *ChannelQueue[T]) bufferData() {
 			}
 		case output <- next:
 			// Wrote buffered data to output chan. Remove item from buffer.
-			cq.buffer.PopFront()
-		case cq.length <- cq.buffer.Len():
+			buffer.PopFront()
+		case cq.length <- buffer.Len():
 		}
 
-		if cq.buffer.Len() == 0 {
+		if buffer.Len() == 0 {
 			// No buffered data; do not select output chan.
 			output = nil
-			next = zero
+			next = zero // set to zero to GC value
 		} else {
 			// Try to write it to output chan.
 			output = cq.output
-			next = cq.buffer.Front()
+			next = buffer.Front()
 		}
 
 		if cq.capacity != -1 {
 			// If buffer at capacity, then stop accepting input.
-			if cq.buffer.Len() >= cq.capacity {
+			if buffer.Len() >= cq.capacity {
 				input = nil
 			} else {
 				input = inputChan
@@ -130,6 +134,7 @@ func (cq *ChannelQueue[T]) bufferData() {
 // the buffer and from the buffer to the Out() chan, with circular buffer
 // behavior of discarding the oldest item when writing to a full buffer.
 func (cq *ChannelQueue[T]) ringBufferData() {
+	var buffer deque.Deque[T]
 	var output chan T
 	var next, zero T
 	input := cq.input
@@ -139,9 +144,9 @@ func (cq *ChannelQueue[T]) ringBufferData() {
 		case elem, open := <-input:
 			if open {
 				// Push data from input chan to buffer.
-				cq.buffer.PushBack(elem)
-				if cq.buffer.Len() > cq.capacity {
-					cq.buffer.PopFront()
+				buffer.PushBack(elem)
+				if buffer.Len() > cq.capacity {
+					buffer.PopFront()
 				}
 			} else {
 				// Input chan closed; do not select input chan.
@@ -149,18 +154,52 @@ func (cq *ChannelQueue[T]) ringBufferData() {
 			}
 		case output <- next:
 			// Wrote buffered data to output chan. Remove item from buffer.
-			cq.buffer.PopFront()
-		case cq.length <- cq.buffer.Len():
+			buffer.PopFront()
+		case cq.length <- buffer.Len():
 		}
 
-		if cq.buffer.Len() == 0 {
+		if buffer.Len() == 0 {
 			// No buffered data; do not select output chan.
 			output = nil
-			next = zero
+			next = zero // set to zero to GC value
 		} else {
 			// Try to write it to output chan.
 			output = cq.output
-			next = cq.buffer.Front()
+			next = buffer.Front()
+		}
+	}
+
+	close(cq.output)
+	close(cq.length)
+}
+
+// oneBufferData is the same as ringBufferData, but with a buffer size of 1.
+func (cq *ChannelQueue[T]) oneBufferData() {
+	var bufLen int
+	var output chan T
+	var next, zero T
+	input := cq.input
+
+	for input != nil || output != nil {
+		select {
+		case elem, open := <-input:
+			if open {
+				// Push data from input chan to buffer.
+				next = elem
+				bufLen = 1
+				// Try to write it to output chan.
+				output = cq.output
+			} else {
+				// Input chan closed; do not select input chan.
+				input = nil
+			}
+		case output <- next:
+			// Wrote buffered data to output chan. Remove item from buffer.
+			bufLen = 0
+			next = zero // set to zero to GC value
+			// No buffered data; do not select output chan.
+			output = nil
+		case cq.length <- bufLen:
 		}
 	}
 

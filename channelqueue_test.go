@@ -232,6 +232,49 @@ func TestRing(t *testing.T) {
 	}
 }
 
+func TestRingOne(t *testing.T) {
+	ch := cq.NewRing[rune](1)
+	for _, r := range "hello" {
+		ch.In() <- r
+	}
+
+	ch.In() <- 'w'
+	if ch.Len() != 1 {
+		t.Fatalf("expected length 1, got %d", ch.Len())
+	}
+	char := <-ch.Out()
+	if char != 'w' {
+		t.Fatal("expected 'w' but got", char)
+	}
+	if ch.Len() != 0 {
+		t.Fatal("expected length 0")
+	}
+
+	for _, r := range "abcdefghij" {
+		ch.In() <- r
+	}
+
+	ch.Close()
+
+	out := make([]rune, 0, ch.Len())
+	for r := range ch.Out() {
+		out = append(out, r)
+	}
+	if string(out) != "j" {
+		t.Fatalf("expected \"j\" but got %q", out)
+	}
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic from capacity 0")
+		}
+	}()
+	ch = cq.NewRing[rune](0)
+	if ch != nil {
+		t.Fatal("expected nil")
+	}
+}
+
 func BenchmarkSerial(b *testing.B) {
 	ch := cq.New[int](b.N)
 	for i := 0; i < b.N; i++ {
