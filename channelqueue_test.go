@@ -232,7 +232,7 @@ func TestRing(t *testing.T) {
 	}
 }
 
-func TestRingOne(t *testing.T) {
+func TestOneRing(t *testing.T) {
 	ch := cq.NewRing[rune](1)
 	for _, r := range "hello" {
 		ch.In() <- r

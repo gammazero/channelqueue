@@ -1,10 +1,9 @@
 // Package channelqueue implements a queue that uses channels for input and
-// output to provide concurrent access to a re-sizable queue.
-//
-// This allows the queue to be used like a channel. Closing the input channel
-// closes the output channel when all queued items are read, consistent with
-// channel behavior. In other words channelqueue is a dynamically buffered
-// channel with up to infinite capacity.
+// output to provide concurrent access to a re-sizable queue. This allows the
+// queue to be used like a channel. Closing the input channel closes the output
+// channel when all queued items are read, consistent with channel behavior. In
+// other words channelqueue is a dynamically buffered channel with up to
+// infinite capacity.
 //
 // ChannelQueue also supports circular buffer behavior when created using
 // `NewRing`. When the buffer is full, writing an additional item discards the
