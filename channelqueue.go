@@ -9,46 +9,51 @@ type ChannelQueue[T any] struct {
 	capacity      int
 }
 
-type config struct {
-	capacity int
-}
-
-type Option func(*config)
+type Option[T any] func(*ChannelQueue[T])
 
 // WithCapacity sets the limit on the number of unread items that channelqueue
 // will hold. Unbuffered behavior is not supported (use a normal channel for
 // that), and a value of zero or less configures the default of no limit.
-func WithCapacity(n int) func(*config) {
-	return func(cfg *config) {
+//
+// Example:
+//
+//	cq := channelqueue.New(WithCapacity[int](64))
+func WithCapacity[T any](n int) func(*ChannelQueue[T]) {
+	return func(c *ChannelQueue[T]) {
 		if n < 1 {
 			n = -1
 		}
-		cfg.capacity = n
+		c.capacity = n
 	}
 }
 
-func getOpts(options []Option) config {
-	cfg := config{
+// WithInput uses an exist channel as the input channel.
+//
+// Example:
+//
+//	in := make(chan int)
+//	cq := channelqueue.New(channlequeue.WithInput[int](in))
+func WithInput[T any](in chan T) func(*ChannelQueue[T]) {
+	return func(c *ChannelQueue[T]) {
+		if in != nil {
+			c.input = in
+		}
+	}
+}
+
+// New creates a new ChannelQueue that, by default, holds an unbounded number
+// of items of the specified type.
+func New[T any](options ...Option[T]) *ChannelQueue[T] {
+	cq := &ChannelQueue[T]{
+		output:   make(chan T),
+		length:   make(chan int),
 		capacity: -1,
 	}
 	for _, opt := range options {
-		opt(&cfg)
+		opt(cq)
 	}
-	return cfg
-}
-
-// New creates a new ChannelQueue with the specified buffer capacity.
-//
-// A capacity < 0 specifies unlimited capacity. Unbuffered behavior is not
-// supported; use a normal channel for that. Use caution if specifying an
-// unlimited capacity since storage is still limited by system resources.
-func New[T any](options ...Option) *ChannelQueue[T] {
-	opts := getOpts(options)
-	cq := &ChannelQueue[T]{
-		input:    make(chan T),
-		output:   make(chan T),
-		length:   make(chan int),
-		capacity: opts.capacity,
+	if cq.input == nil {
+		cq.input = make(chan T)
 	}
 
 	go cq.bufferData()
@@ -58,20 +63,23 @@ func New[T any](options ...Option) *ChannelQueue[T] {
 // NewRing creates a new ChannelQueue with the specified buffer capacity, and
 // circular buffer behavior. When the buffer is full, writing an additional
 // item discards the oldest buffered item.
-func NewRing[T any](options ...Option) *ChannelQueue[T] {
-	opts := getOpts(options)
-	if opts.capacity < 1 {
-		// Unbounded ring is the same as an unbounded queue.
-		return New[T]()
-	}
-
+func NewRing[T any](options ...Option[T]) *ChannelQueue[T] {
 	cq := &ChannelQueue[T]{
-		input:    make(chan T),
 		output:   make(chan T),
 		length:   make(chan int),
-		capacity: opts.capacity,
+		capacity: -1,
 	}
-	if opts.capacity == 1 {
+	for _, opt := range options {
+		opt(cq)
+	}
+	if cq.capacity < 1 {
+		// Unbounded ring is the same as an unbounded queue.
+		return New(WithInput[T](cq.input))
+	}
+	if cq.input == nil {
+		cq.input = make(chan T)
+	}
+	if cq.capacity == 1 {
 		go cq.oneBufferData()
 	} else {
 		go cq.ringBufferData()
