@@ -10,12 +10,12 @@ import (
 )
 
 func TestCapLen(t *testing.T) {
-	ch := cq.New[int](-1)
+	ch := cq.New[int]()
 	if ch.Cap() != -1 {
 		t.Error("expected capacity -1")
 	}
 
-	ch = cq.New[int](3)
+	ch = cq.New[int](cq.WithCapacity(3))
 	if ch.Cap() != 3 {
 		t.Error("expected capacity 3")
 	}
@@ -31,20 +31,15 @@ func TestCapLen(t *testing.T) {
 		in <- i
 	}
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic from capacity 0")
-		}
-	}()
-	ch = cq.New[int](0)
-	if ch != nil {
-		t.Fatal("expected nil")
+	ch = cq.New[int](cq.WithCapacity(0))
+	if ch.Cap() != -1 {
+		t.Error("expected capacity -1")
 	}
 }
 
 func TestUnlimitedSpace(t *testing.T) {
 	const msgCount = 1000
-	ch := cq.New[int](-1)
+	ch := cq.New[int]()
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -61,7 +56,7 @@ func TestUnlimitedSpace(t *testing.T) {
 
 func TestLimitedSpace(t *testing.T) {
 	const msgCount = 1000
-	ch := cq.New[int](32)
+	ch := cq.New[int](cq.WithCapacity(32))
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -77,7 +72,7 @@ func TestLimitedSpace(t *testing.T) {
 }
 
 func TestBufferLimit(t *testing.T) {
-	ch := cq.New[int](32)
+	ch := cq.New[int](cq.WithCapacity(32))
 	for i := 0; i < ch.Cap(); i++ {
 		ch.In() <- i
 	}
@@ -93,7 +88,7 @@ func TestBufferLimit(t *testing.T) {
 }
 
 func TestRace(t *testing.T) {
-	ch := cq.New[int](-1)
+	ch := cq.New[int]()
 
 	var err error
 	done := make(chan struct{})
@@ -147,8 +142,8 @@ func TestRace(t *testing.T) {
 
 func TestDouble(t *testing.T) {
 	const msgCount = 1000
-	ch := cq.New[int](100)
-	recvCh := cq.New[int](100)
+	ch := cq.New[int](cq.WithCapacity(100))
+	recvCh := cq.New[int](cq.WithCapacity(100))
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -178,7 +173,7 @@ func TestDouble(t *testing.T) {
 }
 
 func TestDeadlock(t *testing.T) {
-	ch := cq.New[int](1)
+	ch := cq.New[int](cq.WithCapacity(1))
 	ch.In() <- 1
 	<-ch.Out()
 
@@ -196,7 +191,7 @@ func TestDeadlock(t *testing.T) {
 }
 
 func TestRing(t *testing.T) {
-	ch := cq.NewRing[rune](5)
+	ch := cq.NewRing[rune](cq.WithCapacity(5))
 	for _, r := range "hello" {
 		ch.In() <- r
 	}
@@ -221,19 +216,14 @@ func TestRing(t *testing.T) {
 		t.Fatalf("expected \"fghij\" but got %q", out)
 	}
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic from capacity 0")
-		}
-	}()
-	ch = cq.NewRing[rune](0)
-	if ch != nil {
-		t.Fatal("expected nil")
+	ch = cq.NewRing[rune](cq.WithCapacity(0))
+	if ch.Cap() != -1 {
+		t.Fatal("expected -1 capacity")
 	}
 }
 
 func TestOneRing(t *testing.T) {
-	ch := cq.NewRing[rune](1)
+	ch := cq.NewRing[rune](cq.WithCapacity(1))
 	for _, r := range "hello" {
 		ch.In() <- r
 	}
@@ -264,19 +254,14 @@ func TestOneRing(t *testing.T) {
 		t.Fatalf("expected \"j\" but got %q", out)
 	}
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic from capacity 0")
-		}
-	}()
-	ch = cq.NewRing[rune](0)
-	if ch != nil {
-		t.Fatal("expected nil")
+	ch = cq.NewRing[rune]()
+	if ch.Cap() != -1 {
+		t.Fatal("expected -1 capacity")
 	}
 }
 
 func BenchmarkSerial(b *testing.B) {
-	ch := cq.New[int](b.N)
+	ch := cq.New[int]()
 	for i := 0; i < b.N; i++ {
 		ch.In() <- i
 	}
@@ -286,7 +271,7 @@ func BenchmarkSerial(b *testing.B) {
 }
 
 func BenchmarkParallel(b *testing.B) {
-	ch := cq.New[int](b.N)
+	ch := cq.New[int]()
 	go func() {
 		for i := 0; i < b.N; i++ {
 			<-ch.Out()
@@ -300,7 +285,7 @@ func BenchmarkParallel(b *testing.B) {
 }
 
 func BenchmarkPushPull(b *testing.B) {
-	ch := cq.New[int](b.N)
+	ch := cq.New[int]()
 	for i := 0; i < b.N; i++ {
 		ch.In() <- i
 		<-ch.Out()

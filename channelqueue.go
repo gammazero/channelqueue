@@ -9,24 +9,48 @@ type ChannelQueue[T any] struct {
 	capacity      int
 }
 
+type config struct {
+	capacity int
+}
+
+type Option func(*config)
+
+// WithCapacity sets the limit on the number of unread items that channelqueue
+// will hold. Unbuffered behavior is not supported (use a normal channel for
+// that), and a value of zero or less configures the default of no limit.
+func WithCapacity(n int) func(*config) {
+	return func(cfg *config) {
+		if n < 1 {
+			n = -1
+		}
+		cfg.capacity = n
+	}
+}
+
+func getOpts(options []Option) config {
+	cfg := config{
+		capacity: -1,
+	}
+	for _, opt := range options {
+		opt(&cfg)
+	}
+	return cfg
+}
+
 // New creates a new ChannelQueue with the specified buffer capacity.
 //
 // A capacity < 0 specifies unlimited capacity. Unbuffered behavior is not
 // supported; use a normal channel for that. Use caution if specifying an
 // unlimited capacity since storage is still limited by system resources.
-func New[T any](capacity int) *ChannelQueue[T] {
-	if capacity == 0 {
-		panic("unbuffered behavior not supported")
-	}
-	if capacity < 0 {
-		capacity = -1
-	}
+func New[T any](options ...Option) *ChannelQueue[T] {
+	opts := getOpts(options)
 	cq := &ChannelQueue[T]{
 		input:    make(chan T),
 		output:   make(chan T),
 		length:   make(chan int),
-		capacity: capacity,
+		capacity: opts.capacity,
 	}
+
 	go cq.bufferData()
 	return cq
 }
@@ -34,18 +58,20 @@ func New[T any](capacity int) *ChannelQueue[T] {
 // NewRing creates a new ChannelQueue with the specified buffer capacity, and
 // circular buffer behavior. When the buffer is full, writing an additional
 // item discards the oldest buffered item.
-func NewRing[T any](capacity int) *ChannelQueue[T] {
-	if capacity < 1 {
-		return New[T](capacity)
+func NewRing[T any](options ...Option) *ChannelQueue[T] {
+	opts := getOpts(options)
+	if opts.capacity < 1 {
+		// Unbounded ring is the same as an unbounded queue.
+		return New[T]()
 	}
 
 	cq := &ChannelQueue[T]{
 		input:    make(chan T),
 		output:   make(chan T),
 		length:   make(chan int),
-		capacity: capacity,
+		capacity: opts.capacity,
 	}
-	if capacity == 1 {
+	if opts.capacity == 1 {
 		go cq.oneBufferData()
 	} else {
 		go cq.ringBufferData()
@@ -78,6 +104,14 @@ func (cq *ChannelQueue[T]) Cap() int {
 // channel is closed.
 func (cq *ChannelQueue[T]) Close() {
 	close(cq.input)
+}
+
+// Shutdown calls Close then drains the channel to ensure that the internal
+// goroutine finishes.
+func (cq *ChannelQueue[T]) Shutdown() {
+	close(cq.input)
+	for range cq.output {
+	}
 }
 
 // bufferData is the goroutine that transfers data from the In() chan to the
