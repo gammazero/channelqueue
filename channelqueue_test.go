@@ -2,6 +2,7 @@ package channelqueue_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -176,17 +177,20 @@ func TestDouble(t *testing.T) {
 		}
 		ch.Close()
 	}()
+	var err error
 	go func() {
 		var i int
 		for val := range ch.Out() {
 			if i != val {
-				t.Fatalf("expected %d but got %d", i, val)
+				err = fmt.Errorf("expected %d but got %d", i, val)
+				return
 			}
 			recvCh.In() <- i
 			i++
 		}
 		if i != msgCount {
-			t.Fatalf("expected %d messages from ch, got %d", msgCount, i)
+			err = fmt.Errorf("expected %d messages from ch, got %d", msgCount, i)
+			return
 		}
 		recvCh.Close()
 	}()
@@ -196,6 +200,9 @@ func TestDouble(t *testing.T) {
 			t.Fatal("expected", i, "but got", val)
 		}
 		i++
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 	if i != msgCount {
 		t.Fatalf("expected %d messages from recvCh, got %d", msgCount, i)
