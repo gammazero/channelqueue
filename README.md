@@ -13,10 +13,21 @@ ChannelQueue also supports circular buffer behavior when created using `NewRing`
 
 When specifying an unlimited buffer capacity use caution as the buffer is still limited by the resources available on the host system.
 
-The ChannelQueue buffer auto-resizes according to the number of items buffered. For more information on the queue, see: https://github.com/gammazero/deque
+The ChannelQueue buffer auto-resizes according to the number of items buffered. For more information on the internal queue, see: https://github.com/gammazero/deque
 
 ChannelQueue uses generics to contain items of the type specified. To create a ChannelQueue that holds a specific type, provide a type argument to `New`. For example:
 ```go
-intChanQueue := channelqueue.New[int](1024)
-stringChanQueue := channelqueue.New[string](-1)
+intChanQueue := channelqueue.New[int]()
+stringChanQueue := channelqueue.New[string]()
+```
+
+ChannelQueue can be used to provide buffering between existing channels. Using an existing read chan, write chan, or both are supported:
+```go
+in := make(chan int)
+out := make(chan int)
+
+// Create a buffer between in and out channels.
+channelqueue.New(channelqueue.WithInput[int](in), channelqueue.WithOutput[int](out))
+// ...
+close(in) // this will close cq when all output is read.
 ```
