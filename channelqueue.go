@@ -17,7 +17,7 @@ type Option[T any] func(*ChannelQueue[T])
 //
 // Example:
 //
-//	cq := channelqueue.New(WithCapacity[int](64))
+//	cq := channelqueue.New(channelqueue.WithCapacity[int](64))
 func WithCapacity[T any](n int) func(*ChannelQueue[T]) {
 	return func(c *ChannelQueue[T]) {
 		if n < 1 {
@@ -27,12 +27,15 @@ func WithCapacity[T any](n int) func(*ChannelQueue[T]) {
 	}
 }
 
-// WithInput uses an exist channel as the input channel.
+// WithInput uses an existing channel as the input channel, which is the
+// channel used to write to the queue. This is used when buffering items that
+// must be read from an existing channel. Be aware that calling Close or
+// Shutdown will close this channel.
 //
 // Example:
 //
 //	in := make(chan int)
-//	cq := channelqueue.New(channlequeue.WithInput[int](in))
+//	cq := channelqueue.New(channelqueue.WithInput[int](in))
 func WithInput[T any](in chan T) func(*ChannelQueue[T]) {
 	return func(c *ChannelQueue[T]) {
 		if in != nil {
@@ -41,11 +44,27 @@ func WithInput[T any](in chan T) func(*ChannelQueue[T]) {
 	}
 }
 
+// WithOutput uses an existing channel as the output channel, which is the
+// channel used to read from the queue. This is used when buffering items that
+// must be written to an existing channel. Be aware that ChannelQueue will
+// close this channel when no more items are available.
+//
+// Example:
+//
+//	out := make(chan int)
+//	cq := channelqueue.New(channelqueue.WithOutput[int](out))
+func WithOutput[T any](out chan T) func(*ChannelQueue[T]) {
+	return func(c *ChannelQueue[T]) {
+		if out != nil {
+			c.output = out
+		}
+	}
+}
+
 // New creates a new ChannelQueue that, by default, holds an unbounded number
 // of items of the specified type.
 func New[T any](options ...Option[T]) *ChannelQueue[T] {
 	cq := &ChannelQueue[T]{
-		output:   make(chan T),
 		length:   make(chan int),
 		capacity: -1,
 	}
@@ -55,7 +74,9 @@ func New[T any](options ...Option[T]) *ChannelQueue[T] {
 	if cq.input == nil {
 		cq.input = make(chan T)
 	}
-
+	if cq.output == nil {
+		cq.output = make(chan T)
+	}
 	go cq.bufferData()
 	return cq
 }
@@ -65,7 +86,6 @@ func New[T any](options ...Option[T]) *ChannelQueue[T] {
 // item discards the oldest buffered item.
 func NewRing[T any](options ...Option[T]) *ChannelQueue[T] {
 	cq := &ChannelQueue[T]{
-		output:   make(chan T),
 		length:   make(chan int),
 		capacity: -1,
 	}
@@ -78,6 +98,9 @@ func NewRing[T any](options ...Option[T]) *ChannelQueue[T] {
 	}
 	if cq.input == nil {
 		cq.input = make(chan T)
+	}
+	if cq.output == nil {
+		cq.output = make(chan T)
 	}
 	if cq.capacity == 1 {
 		go cq.oneBufferData()
@@ -102,7 +125,7 @@ func (cq *ChannelQueue[T]) Len() int {
 	return <-cq.length
 }
 
-// Cap returns the capacity of the channel.
+// Cap returns the capacity of the channelqueue. Returns -1 if unbounded.
 func (cq *ChannelQueue[T]) Cap() int {
 	return cq.capacity
 }

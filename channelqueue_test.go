@@ -55,6 +55,39 @@ func TestExistingInput(t *testing.T) {
 	ch.Close()
 }
 
+func TestExistingOutput(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	out := make(chan int)
+	ch := cq.New(cq.WithOutput[int](out))
+	ch.In() <- 42
+	x := <-out
+	if x != 42 {
+		t.Fatal("wrong value")
+	}
+	ch.Close()
+}
+
+func TestExistingChannels(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	in := make(chan int)
+	out := make(chan int)
+	ch := cq.New(cq.WithInput[int](in), cq.WithOutput[int](out))
+	for i := 0; i <= 100; i++ {
+		ch.In() <- i
+	}
+	ch.Close()
+
+	expect := 0
+	for x := range ch.Out() {
+		if x != expect {
+			t.Fatalf("expected %d got %d", expect, x)
+		}
+		expect++
+	}
+}
+
 func TestUnlimitedSpace(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
