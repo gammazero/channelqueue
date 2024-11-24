@@ -7,19 +7,22 @@ import (
 	"time"
 
 	cq "github.com/gammazero/channelqueue"
+	"go.uber.org/goleak"
 )
 
 func TestCapLen(t *testing.T) {
-	ch := cq.New[int](-1)
+	defer goleak.VerifyNone(t)
+
+	ch := cq.New[int]()
 	if ch.Cap() != -1 {
 		t.Error("expected capacity -1")
 	}
+	ch.Close()
 
-	ch = cq.New[int](3)
+	ch = cq.New[int](cq.WithCapacity[int](3))
 	if ch.Cap() != 3 {
 		t.Error("expected capacity 3")
 	}
-
 	if ch.Len() != 0 {
 		t.Error("expected 0 from Len()")
 	}
@@ -30,21 +33,68 @@ func TestCapLen(t *testing.T) {
 		}
 		in <- i
 	}
+	ch.Shutdown()
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic from capacity 0")
+	ch = cq.New(cq.WithCapacity[int](0))
+	if ch.Cap() != -1 {
+		t.Error("expected capacity -1")
+	}
+	ch.Close()
+}
+
+func TestExistingInput(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	in := make(chan int, 1)
+	ch := cq.New(cq.WithInput[int](in), cq.WithCapacity[int](64))
+	in <- 42
+	x := <-ch.Out()
+	if x != 42 {
+		t.Fatal("wrong value")
+	}
+	ch.Close()
+}
+
+func TestExistingOutput(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	out := make(chan int)
+	ch := cq.New(cq.WithOutput[int](out))
+	ch.In() <- 42
+	x := <-out
+	if x != 42 {
+		t.Fatal("wrong value")
+	}
+	ch.Close()
+}
+
+func TestExistingChannels(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	in := make(chan int)
+	out := make(chan int)
+
+	// Create a buffer between in and out channels.
+	cq.New(cq.WithInput[int](in), cq.WithOutput[int](out))
+	for i := 0; i <= 100; i++ {
+		in <- i
+	}
+	close(in) // this will close ch when all output is read.
+
+	expect := 0
+	for x := range out {
+		if x != expect {
+			t.Fatalf("expected %d got %d", expect, x)
 		}
-	}()
-	ch = cq.New[int](0)
-	if ch != nil {
-		t.Fatal("expected nil")
+		expect++
 	}
 }
 
 func TestUnlimitedSpace(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	const msgCount = 1000
-	ch := cq.New[int](-1)
+	ch := cq.New[int]()
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -60,8 +110,10 @@ func TestUnlimitedSpace(t *testing.T) {
 }
 
 func TestLimitedSpace(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	const msgCount = 1000
-	ch := cq.New[int](32)
+	ch := cq.New(cq.WithCapacity[int](32))
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -77,23 +129,26 @@ func TestLimitedSpace(t *testing.T) {
 }
 
 func TestBufferLimit(t *testing.T) {
-	ch := cq.New[int](32)
+	defer goleak.VerifyNone(t)
+
+	ch := cq.New(cq.WithCapacity[int](32))
+	defer ch.Shutdown()
+
 	for i := 0; i < ch.Cap(); i++ {
 		ch.In() <- i
 	}
-	var timeout bool
 	select {
 	case ch.In() <- 999:
-	case <-time.After(200 * time.Millisecond):
-		timeout = true
-	}
-	if !timeout {
 		t.Fatal("expected timeout on full channel")
+	case <-time.After(200 * time.Millisecond):
 	}
 }
 
 func TestRace(t *testing.T) {
-	ch := cq.New[int](-1)
+	defer goleak.VerifyNone(t)
+
+	ch := cq.New[int]()
+	defer ch.Shutdown()
 
 	var err error
 	done := make(chan struct{})
@@ -146,9 +201,11 @@ func TestRace(t *testing.T) {
 }
 
 func TestDouble(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	const msgCount = 1000
-	ch := cq.New[int](100)
-	recvCh := cq.New[int](100)
+	ch := cq.New(cq.WithCapacity[int](100))
+	recvCh := cq.New(cq.WithCapacity[int](100))
 	go func() {
 		for i := 0; i < msgCount; i++ {
 			ch.In() <- i
@@ -157,28 +214,41 @@ func TestDouble(t *testing.T) {
 	}()
 	var err error
 	go func() {
-		for i := 0; i < msgCount; i++ {
-			val := <-ch.Out()
+		var i int
+		for val := range ch.Out() {
 			if i != val {
 				err = fmt.Errorf("expected %d but got %d", i, val)
 				return
 			}
 			recvCh.In() <- i
+			i++
 		}
+		if i != msgCount {
+			err = fmt.Errorf("expected %d messages from ch, got %d", msgCount, i)
+			return
+		}
+		recvCh.Close()
 	}()
-	for i := 0; i < msgCount; i++ {
-		val := <-recvCh.Out()
+	var i int
+	for val := range recvCh.Out() {
 		if i != val {
 			t.Fatal("expected", i, "but got", val)
 		}
+		i++
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
+	if i != msgCount {
+		t.Fatalf("expected %d messages from recvCh, got %d", msgCount, i)
+	}
 }
 
 func TestDeadlock(t *testing.T) {
-	ch := cq.New[int](1)
+	defer goleak.VerifyNone(t)
+
+	ch := cq.New(cq.WithCapacity[int](1))
+	defer ch.Shutdown()
 	ch.In() <- 1
 	<-ch.Out()
 
@@ -196,7 +266,9 @@ func TestDeadlock(t *testing.T) {
 }
 
 func TestRing(t *testing.T) {
-	ch := cq.NewRing[rune](5)
+	defer goleak.VerifyNone(t)
+
+	ch := cq.NewRing(cq.WithCapacity[rune](5))
 	for _, r := range "hello" {
 		ch.In() <- r
 	}
@@ -221,19 +293,17 @@ func TestRing(t *testing.T) {
 		t.Fatalf("expected \"fghij\" but got %q", out)
 	}
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic from capacity 0")
-		}
-	}()
-	ch = cq.NewRing[rune](0)
-	if ch != nil {
-		t.Fatal("expected nil")
+	ch = cq.NewRing(cq.WithCapacity[rune](0))
+	if ch.Cap() != -1 {
+		t.Fatal("expected -1 capacity")
 	}
+	ch.Close()
 }
 
 func TestOneRing(t *testing.T) {
-	ch := cq.NewRing[rune](1)
+	defer goleak.VerifyNone(t)
+
+	ch := cq.NewRing(cq.WithCapacity[rune](1))
 	for _, r := range "hello" {
 		ch.In() <- r
 	}
@@ -264,19 +334,23 @@ func TestOneRing(t *testing.T) {
 		t.Fatalf("expected \"j\" but got %q", out)
 	}
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic from capacity 0")
-		}
-	}()
-	ch = cq.NewRing[rune](0)
-	if ch != nil {
-		t.Fatal("expected nil")
+	ch = cq.NewRing[rune]()
+	if ch.Cap() != -1 {
+		t.Fatal("expected -1 capacity")
 	}
+	ch.Close()
+}
+
+func TestCloseMultiple(t *testing.T) {
+	ch := cq.New[string]()
+	ch.Close()
+	ch.Close()
+	ch.Shutdown()
+	ch.Shutdown()
 }
 
 func BenchmarkSerial(b *testing.B) {
-	ch := cq.New[int](b.N)
+	ch := cq.New[int]()
 	for i := 0; i < b.N; i++ {
 		ch.In() <- i
 	}
@@ -286,7 +360,7 @@ func BenchmarkSerial(b *testing.B) {
 }
 
 func BenchmarkParallel(b *testing.B) {
-	ch := cq.New[int](b.N)
+	ch := cq.New[int]()
 	go func() {
 		for i := 0; i < b.N; i++ {
 			<-ch.Out()
@@ -300,7 +374,7 @@ func BenchmarkParallel(b *testing.B) {
 }
 
 func BenchmarkPushPull(b *testing.B) {
-	ch := cq.New[int](b.N)
+	ch := cq.New[int]()
 	for i := 0; i < b.N; i++ {
 		ch.In() <- i
 		<-ch.Out()
