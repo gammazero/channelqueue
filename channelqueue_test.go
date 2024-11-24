@@ -73,14 +73,16 @@ func TestExistingChannels(t *testing.T) {
 
 	in := make(chan int)
 	out := make(chan int)
-	ch := cq.New(cq.WithInput[int](in), cq.WithOutput[int](out))
+
+	// Create a buffer between in and out channels.
+	cq.New(cq.WithInput[int](in), cq.WithOutput[int](out))
 	for i := 0; i <= 100; i++ {
-		ch.In() <- i
+		in <- i
 	}
-	ch.Close()
+	close(in) // this will close ch when all output is read.
 
 	expect := 0
-	for x := range ch.Out() {
+	for x := range out {
 		if x != expect {
 			t.Fatalf("expected %d got %d", expect, x)
 		}
@@ -337,6 +339,14 @@ func TestOneRing(t *testing.T) {
 		t.Fatal("expected -1 capacity")
 	}
 	ch.Close()
+}
+
+func TestCloseMultiple(t *testing.T) {
+	ch := cq.New[string]()
+	ch.Close()
+	ch.Close()
+	ch.Shutdown()
+	ch.Shutdown()
 }
 
 func BenchmarkSerial(b *testing.B) {

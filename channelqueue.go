@@ -1,12 +1,17 @@
 package channelqueue
 
-import "github.com/gammazero/deque"
+import (
+	"sync"
+
+	"github.com/gammazero/deque"
+)
 
 // ChannelQueue uses a queue to buffer data between input and output channels.
 type ChannelQueue[T any] struct {
 	input, output chan T
 	length        chan int
 	capacity      int
+	closeOnce     sync.Once
 }
 
 type Option[T any] func(*ChannelQueue[T])
@@ -130,17 +135,20 @@ func (cq *ChannelQueue[T]) Cap() int {
 	return cq.capacity
 }
 
-// Close closes the input channel. Additional input will panic, output will
-// continue to be readable until there is no more data, and then the output
-// channel is closed.
+// Close closes the input channel. This is the same as calling the builtin
+// close on the input channel, except Close can be called multiple times..
+// Additional input will panic, output will continue to be readable until there
+// is no more data, and then the output channel is closed.
 func (cq *ChannelQueue[T]) Close() {
-	close(cq.input)
+	cq.closeOnce.Do(func() {
+		close(cq.input)
+	})
 }
 
 // Shutdown calls Close then drains the channel to ensure that the internal
 // goroutine finishes.
 func (cq *ChannelQueue[T]) Shutdown() {
-	close(cq.input)
+	cq.Close()
 	for range cq.output {
 	}
 }
